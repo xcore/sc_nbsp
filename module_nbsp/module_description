@@ -1,0 +1,5 @@
+NBSP - non-blocking bidirectional small package protocol
+
+Please see
+  src/nbsp.h for a description of the API and how to use it
+  src/nbsp.xc for information about the protocol
