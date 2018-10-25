@@ -63,7 +63,7 @@ static void sleep(timer t, unsigned microseconds)
 
 static void send_some_words(chanend c, t_nbsp_state& state, unsigned b[], unsigned& sn, unsigned amount)
 {
-  for (int i = 0; i < amount; i++)
+  for (unsigned i = 0; i < amount; i++)
   {
     nbsp_send(c, state, b, sn++);
   }

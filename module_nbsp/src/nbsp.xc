@@ -1,19 +1,9 @@
 /**
- * Copyright: 2014, Errsu. All rights reserved.
+ * Copyright: 2014-2017, Errsu. All rights reserved.
  *
  */
 
 #include "nbsp.h"
-
-#define CHECK_FOR_PROGRAMMING_ERRORS 0
-
-#if CHECK_FOR_PROGRAMMING_ERRORS
-#include <stdio.h>
-#endif
-
-#pragma select handler
-extern inline void nbsp_receive_msg(chanend c, t_nbsp_state& state);
-extern inline unsigned nbsp_received_data(t_nbsp_state& state);
 
 // NBSP - non-blocking bidirectional small package protocol
 //
@@ -40,10 +30,10 @@ void nbsp_init(t_nbsp_state& state, unsigned buffer_size)
     printf("nbsp error: buffer size must be zero or a power of 2 greater than 1\n");
   }
 #endif
-  state.waiting_for_ack  = 0;
-  state.read_index       = 0;
-  state.write_index      = 0;
-  state.buffer_mask      = buffer_size - 1;
+  state.words_to_be_acknowledged = 0;
+  state.read_index  = 0;
+  state.write_index = 0;
+  state.buffer_mask = buffer_size - 1;
 }
 
 static void send_data(chanend c, unsigned data)
@@ -68,7 +58,7 @@ unsigned nbsp_handle_msg(chanend c, t_nbsp_state& state, unsigned (&?buffer)[])
       printf("nbsp error: sending side must provide buffer to nbsp_handle_msg\n");
       return 0;
     }
-    if (!state.waiting_for_ack)
+    if (state.words_to_be_acknowledged == 0)
     {
       printf("nbsp error: unexpected ack\n");
     }
@@ -82,7 +72,7 @@ unsigned nbsp_handle_msg(chanend c, t_nbsp_state& state, unsigned (&?buffer)[])
     }
     else
     {
-      state.waiting_for_ack = 0;
+      state.words_to_be_acknowledged = 0;
     }
     return 0; // no data received
   }
@@ -95,11 +85,11 @@ unsigned nbsp_handle_msg(chanend c, t_nbsp_state& state, unsigned (&?buffer)[])
 
 unsigned nbsp_send(chanend c, t_nbsp_state& state, unsigned buffer[], unsigned data)
 {
-  if (!state.waiting_for_ack)
+  if (state.words_to_be_acknowledged == 0)
   {
     // buffer must be empty, we can immediately send, no need for buffering
     send_data(c, data);
-    state.waiting_for_ack = 1;
+    state.words_to_be_acknowledged = 1;
     return 1;
   }
   else
@@ -131,7 +121,7 @@ unsigned nbsp_pending_words_to_send(t_nbsp_state& state)
 {
   return
     ((state.write_index - state.read_index + state.buffer_mask + 1) & state.buffer_mask) +
-    (state.waiting_for_ack ? 1 : 0);
+    state.words_to_be_acknowledged;
 }
 
 unsigned nbsp_sending_capacity(t_nbsp_state& state)
@@ -142,7 +132,7 @@ unsigned nbsp_sending_capacity(t_nbsp_state& state)
 
 void nbsp_flush(chanend c, t_nbsp_state& state, unsigned buffer[])
 {
-  while(state.waiting_for_ack)
+  while(state.words_to_be_acknowledged)
   {
     select
     {
@@ -154,6 +144,20 @@ void nbsp_flush(chanend c, t_nbsp_state& state, unsigned buffer[])
           printf("nbsp error: unexpected data while flushing sender\n");
 #endif
         }
+        break;
+      }
+    }
+  }
+}
+
+void nbsp_uddw_flush(chanend c, t_nbsp_state& state, unsigned buffer[])
+{
+  while(state.words_to_be_acknowledged)
+  {
+    select
+    {
+      case nbsp_uddw_handle_ack(c, state, buffer):
+      {
         break;
       }
     }
@@ -185,7 +189,7 @@ void nbsp_handle_outgoing_traffic(chanend c, t_nbsp_state& state, unsigned buffe
   t :> time;
   time += (available_tens_of_ns - (TIME_TO_START + TIME_TO_FINISH));
 
-  while(state.waiting_for_ack)
+  while(state.words_to_be_acknowledged)
   {
     select
     {

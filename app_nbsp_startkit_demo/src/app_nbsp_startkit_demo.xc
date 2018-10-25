@@ -48,7 +48,7 @@
 #define LED_B3 0x00100
 #define LED_C3 0x00080
 
-port p32 = XS1_PORT_32A;
+port port32 = XS1_PORT_32A;
 
 static void player(
   unsigned led,
@@ -179,7 +179,7 @@ int main()
   chan cx1, cx2, cx3, cx4, cx5, cx6, cx7, cx8;
 
   par {
-    on tile[0]: player(LED_B1, ct8, ct1, cx8, cx1, p32);
+    on tile[0]: player(LED_B1, ct8, ct1, cx8, cx1, port32);
     on tile[0]: player(LED_C1, ct1, ct2, cx1, cx2, null);
     on tile[0]: player(LED_C2, ct3, ct4, cx2, cx3, null);
     on tile[0]: player(LED_C3, ct6, ct7, cx3, cx4, null);

@@ -1,11 +1,17 @@
 /**
- * Copyright: 2014, Errsu. All rights reserved.
+ * Copyright: 2014-2017, Errsu. All rights reserved.
  */
 
 #ifndef __nbsp_h__
 #define __nbsp_h__
 
 #include <platform.h>
+
+#define CHECK_FOR_PROGRAMMING_ERRORS 0
+
+#if CHECK_FOR_PROGRAMMING_ERRORS
+#include <stdio.h>
+#endif
 
 // NBSP - non-blocking bidirectional small package protocol
 // ========================================================
@@ -274,7 +280,7 @@ typedef struct
 {
   unsigned msg_is_ack;
   unsigned msg_data;
-  unsigned waiting_for_ack;
+  unsigned words_to_be_acknowledged;
 
   // output buffer
   unsigned read_index;
@@ -323,5 +329,91 @@ extern void nbsp_handle_outgoing_traffic(
   unsigned buffer[],
   unsigned available_tens_of_ns);
 
+//-----------------------------------------------------------------------------------------
+// Protocol variant UDDW = unidirectional, double word
+// - sends two words at once, no tokens in forward direction
+// - significantly faster (> 4...8 times compared to the unidirectional NBSP case)
+// - essentially implements a streaming channel, only few allowed cross-tile!!!!
+// - sender and receiver cannot be exchanged
+// - receiver needs no state, sender uses normal nbsp state
+// - cannot be mixed with normal nbsp on the same channel/state/buffer
+// - the functions nbsp_init, nbsp_pending_words_to_send and nbsp_sending_capacity
+//   can be used for both normal nbsp and for the uddw variant
+// - nbsp_uddw_handle_ack replaces nbsp_receive_msg and nbsp_handle_msg on the sender side
+// - nbsp_uddw_receive replaces nbsp_receive_msg, nbsp_handle_msg and nbsp_received_data
+//   on the receiver side
+
+inline unsigned nbsp_uddw_send(chanend c, t_nbsp_state& state, unsigned buffer[], unsigned data1, unsigned data2)
+{
+  if (state.words_to_be_acknowledged == 0)
+  {
+    // buffer must be empty, we can immediately send, no need for buffering
+    outuint(c, data1);
+    outuint(c, data2);
+    state.words_to_be_acknowledged = 2;
+    return 1;
+  }
+  else
+  {
+#if CHECK_FOR_PROGRAMMING_ERRORS
+    if (state.buffer_mask == 0xFFFFFFFF)
+    {
+      printf("nudp error: nudp_uddw_send needs nonzero buffer size\n");
+    }
+#endif
+    // busy sending, must buffer the data
+    unsigned next_write_index = (state.write_index + 2) & state.buffer_mask;
+
+    if (next_write_index != state.read_index)
+    {
+      buffer[state.write_index]   = data1;
+      buffer[state.write_index+1] = data2;
+      state.write_index = next_write_index;
+      return 1;
+    }
+    else
+    {
+      // buffer has no room, data is not sent
+      return 0;
+    }
+  }
+}
+
+#pragma select handler
+inline void nbsp_uddw_handle_ack(chanend c, t_nbsp_state& state, unsigned buffer[])
+{
+  unsigned char token;
+
+  token = inct(c);
+
+#if CHECK_FOR_PROGRAMMING_ERRORS
+  if (state.words_to_be_acknowledged == 0)
+  {
+    printf("nbsp error: unexpected ack\n");
+  }
+#endif
+
+  if (state.read_index != state.write_index)
+  {
+    // there is more data to send
+    outuint(c, buffer[state.read_index]);
+    outuint(c, buffer[state.read_index + 1]);
+    state.read_index = (state.read_index + 2) & state.buffer_mask;
+  }
+  else
+  {
+    state.words_to_be_acknowledged = 0;
+  }
+}
+
+#pragma select handler
+inline void nbsp_uddw_receive(chanend c, unsigned& data1, unsigned& data2)
+{
+  data1 = inuint(c);
+  data2 = inuint(c);
+  outct(c, XS1_CT_END);
+}
+
+extern void nbsp_uddw_flush(chanend c, t_nbsp_state& state, unsigned buffer[]);
 
 #endif

@@ -1,9 +1,9 @@
 NBSP SOFTWARE COMPONENT
 .......................
 
-:Stable release:  unreleased
-:Latest release:  0.1.0
-:Status:  beta
+:Stable release:  1.1.0
+:Latest release:  1.1.0
+:Status:  stable
 :Maintainer:  errsu
 :Description:  NBSP - a protocol for convenient asynchronous inter-core communication
 
