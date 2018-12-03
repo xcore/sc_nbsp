@@ -40,7 +40,6 @@ static void send_data(chanend c, unsigned data)
 {
   outct(c, NBSP_CT_DATA);
   outuint(c, data);
-  outct(c, XS1_CT_PAUSE);
 }
 
 static void send_ack(chanend c)
@@ -63,6 +62,7 @@ unsigned nbsp_handle_msg(chanend c, t_nbsp_state& state, unsigned (&?buffer)[])
       printf("nbsp error: unexpected ack\n");
     }
 #endif
+    outct(c, XS1_CT_PAUSE);
     if (state.read_index != state.write_index)
     {
       // there is more data to send
